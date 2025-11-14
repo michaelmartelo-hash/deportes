@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+requests
+python-telegram-bot==13.19
+apscheduler
+pytz
+python-dateutil
+pandas
+numpy
+gunicorn
