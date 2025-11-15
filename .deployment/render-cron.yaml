@@ -1,0 +1,16 @@
+cron:
+  - name: daily_sports_8am
+    schedule: "0 13 * * *"
+    command: "curl -s https://deportes-2mhe.onrender.com/run_report"
+
+  - name: daily_sports_2pm
+    schedule: "0 19 * * *"
+    command: "curl -s https://deportes-2mhe.onrender.com/run_report"
+
+  - name: daily_sports_4_30pm
+    schedule: "30 21 * * *"
+    command: "curl -s https://deportes-2mhe.onrender.com/run_report"
+
+  - name: daily_sports_8pm
+    schedule: "0 01 * * *"
+    command: "curl -s https://deportes-2mhe.onrender.com/run_report"
