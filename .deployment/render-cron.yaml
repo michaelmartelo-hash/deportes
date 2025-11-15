@@ -11,6 +11,7 @@ cron:
     schedule: "30 21 * * *"
     command: "curl -s https://deportes-2mhe.onrender.com/run_report"
 
+  # AJUSTE RECOMENDADO
   - name: daily_sports_8pm
-    schedule: "0 01 * * *"
+    schedule: "0 00 * * *"
     command: "curl -s https://deportes-2mhe.onrender.com/run_report"
