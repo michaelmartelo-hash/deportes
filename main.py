@@ -1,306 +1,201 @@
-import os 
-import asyncio
-import logging
+import os
+import requests
+from fastapi import FastAPI
+import uvicorn
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-import requests
-from fastapi import FastAPI
-from telegram import Bot
-
-
-# -------------------------------------
-# CONFIGURACIÓN
-# -------------------------------------
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# ============================
+# ENV VARIABLES
+# ============================
+TELEGRAM_TOKEN = os.getenv("TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("CHAT_ID")
 
 API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY")
 API_TENNIS_KEY = os.getenv("API_TENNIS_KEY")
 ODDS_API_KEY = os.getenv("ODDS_API_KEY")
 
-TOKEN = os.getenv("TOKEN")
-CHAT_ID = int(os.getenv("CHAT_ID"))
-
-bot = Bot(token=TOKEN)
 app = FastAPI()
 
-COLOMBIA_TZ = ZoneInfo("America/Bogota")
+
+# ============================
+# HELPER: ENVIAR A TELEGRAM
+# ============================
+def send_telegram(msg: str):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    resp = requests.post(url, json={
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": msg,
+        "parse_mode": "HTML"
+    })
+    print("Telegram response:", resp.text)
+    return resp.status_code == 200
 
 
-# -------------------------------------
-# TOP 20 FIFA
-# -------------------------------------
-FIFA_TOP20 = [
-    "Argentina", "Francia", "Inglaterra", "Bélgica", "Brasil",
-    "Países Bajos", "Portugal", "España", "Italia", "Croacia",
-    "EE.UU.", "Colombia", "México", "Marruecos", "Alemania",
-    "Suiza", "Uruguay", "Dinamarca", "Japón", "Senegal"
-]
-
-
-# -------------------------------------
-# PROBABILIDADES DESDE ODDS API
-# -------------------------------------
-def get_probabilities(team1, team2, sport, match_id):
-    logger.info(f"Consultando Odds API para {team1} vs {team2} ({sport}) match_id={match_id}")
-
+# ============================
+# TENIS (TOP 10)
+# ============================
+def get_tennis_report():
     try:
-        url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds"
-        params = {
-            "apiKey": ODDS_API_KEY,
-            "regions": "us",
-            "markets": "h2h"
-        }
-        
-        r = requests.get(url, params=params)
-        logger.info(f"Odds API status: {r.status_code}")
+        url = "https://v1.tennis.api-sports.io/fixtures"
+        headers = {"x-apisports-key": API_TENNIS_KEY}
 
-        if r.status_code != 200:
-            logger.error(f"Odds API ERROR: {r.text}")
-            return None, None
-
+        r = requests.get(url, headers=headers)
         data = r.json()
 
-        for event in data:
-            if event["id"] == match_id:
-                outcomes = event["bookmakers"][0]["markets"][0]["outcomes"]
-                prob1 = 1 / float(outcomes[0]["price"])
-                prob2 = 1 / float(outcomes[1]["price"])
-                total = prob1 + prob2
-                return round(prob1 / total * 100, 1), round(prob2 / total * 100, 1)
+        matches = []
+        for m in data.get("response", []):
+            try:
+                rank_home = m["players"]["home"]["ranking"]
+                rank_away = m["players"]["away"]["ranking"]
+
+                if rank_home <= 10 or rank_away <= 10:
+                    matches.append(m)
+            except:
+                continue
+
+        if not matches:
+            return "🎾 <b>Tenis</b>: No hay partidos del top 10 hoy.\n"
+
+        msg = "🎾 <b>Tenis - Top 10 Hoy</b>\n"
+        for m in matches:
+            home = m["players"]["home"]["name"]
+            away = m["players"]["away"]["name"]
+
+            msg += f"• {home} vs {away}\n"
+
+        return msg + "\n"
 
     except Exception as e:
-        logger.error(f"ERROR Odds API: {e}")
-
-    return None, None
+        return f"🎾 Error tenis: {e}\n\n"
 
 
-
-# -------------------------------------
-# FUTBOL (API-FOOTBALL)
-# -------------------------------------
-def get_football_matches():
-    logger.info("Llamando API-Football...")
-    
-    headers = {"x-apisports-key": API_FOOTBALL_KEY}
-    url = "https://v3.football.api-sports.io/fixtures"
-
-    today = datetime.now(COLOMBIA_TZ).strftime("%Y-%m-%d")
-    params = {"date": today}
-
-    r = requests.get(url, headers=headers, params=params)
-    logger.info(f"API-Football status: {r.status_code}")
-
-    if r.status_code != 200:
-        logger.error(f"API-Football ERROR: {r.text}")
-        return []
-
-    data = r.json()
-    matches = []
-
-    if "response" not in data:
-        logger.error("API-Football sin 'response'")
-        return matches
-
-    for m in data["response"]:
-        home = m["teams"]["home"]["name"]
-        away = m["teams"]["away"]["name"]
-
-        if home in FIFA_TOP20 or away in FIFA_TOP20:
-            match_id = str(m["fixture"]["id"])
-            prob1, prob2 = get_probabilities(home, away, "soccer", match_id)
-
-            try:
-                hour_col = datetime.fromisoformat(
-                    m["fixture"]["date"].replace("Z", "+00:00")
-                ).astimezone(COLOMBIA_TZ).strftime("%H:%M")
-            except Exception as e:
-                logger.error(f"ERROR fecha football: {e}")
-                hour_col = "?"
-
-            matches.append({
-                "home": home,
-                "away": away,
-                "time": hour_col,
-                "prob1": prob1,
-                "prob2": prob2
-            })
-
-    logger.info(f"API-Football retornó {len(matches)} partidos filtrados")
-    return matches
-
-
-
-# -------------------------------------
-# TENIS
-# -------------------------------------
-TOP10_ATP = [
-    "Novak Djokovic", "Carlos Alcaraz", "Jannik Sinner", "Alexander Zverev",
-    "Daniil Medvedev", "Holger Rune", "Andrey Rublev", "Casper Ruud",
-    "Hubert Hurkacz", "Grigor Dimitrov"
-]
-
-def get_tennis_matches():
-    logger.info("Llamando TennisAPI...")
-
-    url = f"https://api.tennisapi.com/v1/matches?date=today&key={API_TENNIS_KEY}"
-    r = requests.get(url)
-
-    logger.info(f"Tennis API status: {r.status_code}")
-
-    if r.status_code != 200:
-        logger.error(f"Tennis API ERROR: {r.text}")
-        return []
-
-    data = r.json()
-    matches = []
-
-    if "data" not in data:
-        logger.error("Tennis API sin 'data'")
-        return matches
-
-    for m in data["data"]:
-        p1 = m["player1"]
-        p2 = m["player2"]
-
-        if p1 in TOP10_ATP or p2 in TOP10_ATP:
-            match_id = str(m["id"])
-            prob1, prob2 = get_probabilities(p1, p2, "tennis", match_id)
-
-            try:
-                time = datetime.fromtimestamp(m["time"]).astimezone(COLOMBIA_TZ).strftime("%H:%M")
-            except Exception as e:
-                logger.error(f"ERROR fecha tenis: {e}")
-                time = "?"
-
-            matches.append({
-                "p1": p1,
-                "p2": p2,
-                "time": time,
-                "prob1": prob1,
-                "prob2": prob2
-            })
-
-    logger.info(f"Tennis API retornó {len(matches)} partidos")
-    return matches
-
-
-
-# -------------------------------------
-# UFC (SOLO UFC)
-# -------------------------------------
-def get_ufc_events():
-    logger.info("Llamando Odds API UFC...")
-
-    url = f"https://api.the-odds-api.com/v4/sports/mma_mixed_martial_arts/events?apiKey={ODDS_API_KEY}"
-    r = requests.get(url)
-
-    logger.info(f"Odds API UFC status: {r.status_code}")
-
-    if r.status_code != 200:
-        logger.error(f"Odds API UFC ERROR: {r.text}")
-        return []
-
-    data = r.json()
-    fights = []
-
-    for event in data:
-        if "ufc" not in event["sport_title"].lower():
-            continue
-
-        try:
-            start = datetime.fromisoformat(event["commence_time"].replace("Z", "+00:00"))
-            time = start.astimezone(COLOMBIA_TZ).strftime("%H:%M")
-        except Exception as e:
-            logger.error(f"ERROR fecha UFC: {e}")
-            time = "?"
-
-        outcomes = event.get("bookmakers", [])[0]["markets"][0]["outcomes"]
-        f1 = outcomes[0]["name"]
-        f2 = outcomes[1]["name"]
-
-        prob1, prob2 = get_probabilities(f1, f2, "mma_mixed_martial_arts", event["id"])
-
-        fights.append({
-            "f1": f1,
-            "f2": f2,
-            "time": time,
-            "prob1": prob1,
-            "prob2": prob2
-        })
-
-    return fights[:5]
-
-
-
-# -------------------------------------
-# REPORTE
-# -------------------------------------
-async def send_daily_report():
+# ============================
+# UFC
+# ============================
+def get_ufc_report():
     try:
-        now = datetime.now(COLOMBIA_TZ).strftime("%Y-%m-%d %H:%M")
-        logger.info("Generando reporte...")
+        url = "https://api.the-odds-api.com/v4/sports/mma_mixed_martial_arts/events?apiKey=" + ODDS_API_KEY
+        data = requests.get(url).json()
 
-        football = get_football_matches()
-        tennis = get_tennis_matches()
-        ufc = get_ufc_events()
+        if not data:
+            return "🥊 <b>UFC</b>: No hay eventos hoy.\n"
 
-        logger.info(f"Resumen: fútbol={len(football)}, tenis={len(tennis)}, ufc={len(ufc)}")
+        msg = "🥊 <b>Peleas UFC Hoy</b>\n"
+        for event in data:
+            for fight in event.get("competitors", []):
+                pass
 
-        msg = f"📊 *Reporte Deportivo*\n🕒 *Hora Colombia:* {now}\n\n"
+            msg += f"• {event['home_team']} vs {event['away_team']}\n"
 
-        msg += "⚽ *Partidos de selecciones (Top 20 FIFA)*\n"
-        if football:
-            for m in football:
-                msg += f"• {m['home']} vs {m['away']} — {m['time']}h\n"
-                if m['prob1'] is not None:
-                    msg += f"   Prob: {m['home']} {m['prob1']}% — {m['away']} {m['prob2']}%\n"
-        else:
-            msg += "No hay partidos importantes hoy.\n"
-        msg += "\n"
-
-        msg += "🎾 *Tenis (Top 10 ATP)*\n"
-        if tennis:
-            for m in tennis:
-                msg += f"• {m['p1']} vs {m['p2']} — {m['time']}h\n"
-                if m['prob1'] is not None:
-                    msg += f"   Prob: {m['p1']} {m['prob1']}% — {m['p2']} {m['prob2']}%\n"
-        else:
-            msg += "No hay partidos relevantes hoy.\n"
-        msg += "\n"
-
-        msg += "🥋 *UFC — Cartelera principal*\n"
-        if ufc:
-            for f in ufc:
-                msg += f"• {f['f1']} vs {f['f2']} — {f['time']}h\n"
-                if f['prob1'] is not None:
-                    msg += f"   Prob: {f['f1']} {f['prob1']}% — {f['f2']} {f['prob2']}%\n"
-        else:
-            msg += "No hay eventos UFC hoy.\n"
-
-        logger.info("Enviando reporte a Telegram...")
-        await asyncio.get_event_loop().run_in_executor(
-            None, lambda: bot.send_message(chat_id=CHAT_ID, text=msg, parse_mode="Markdown")
-        )
-
-        logger.info("Reporte enviado correctamente.")
+        return msg + "\n"
 
     except Exception as e:
-        logger.error(f"ERROR en reporte: {e}")
+        return f"🥊 Error UFC: {e}\n\n"
 
 
+# ============================
+# FÚTBOL - Selecciones nacionales
+# ============================
+def get_soccer_report():
+    try:
+        url = "https://v3.football.api-sports.io/fixtures?date=" + datetime.now().strftime("%Y-%m-%d")
+        headers = {"x-apisports-key": API_FOOTBALL_KEY}
+        data = requests.get(url, headers=headers).json()
 
-# -------------------------------------
-# ENDPOINTS
-# -------------------------------------
+        matches = [
+            m for m in data.get("response", [])
+            if m["teams"]["home"]["name"] in ("Colombia", "Brazil", "Argentina", "Chile", "Ecuador", "Uruguay", "USA", "New Zealand")
+            or m["teams"]["away"]["name"] in ("Colombia", "Brazil", "Argentina", "Chile", "Ecuador", "Uruguay", "USA", "New Zealand")
+        ]
+
+        if not matches:
+            return "⚽ <b>Fútbol selecciones</b>: No hay partidos hoy.\n"
+
+        msg = "⚽ <b>Partidos de Selecciones Hoy</b>\n"
+        for m in matches:
+            home = m["teams"]["home"]["name"]
+            away = m["teams"]["away"]["name"]
+
+            msg += f"• {home} vs {away}\n"
+
+        return msg + "\n"
+
+    except Exception as e:
+        return f"⚽ Error fútbol: {e}\n\n"
+
+
+# ============================
+# PROBABILIDADES
+# ============================
+def get_probabilities():
+    try:
+        url = f"https://api.the-odds-api.com/v4/sports/soccer_international/odds?apiKey={ODDS_API_KEY}&regions=eu"
+        data = requests.get(url).json()
+
+        msg = "📊 <b>Probabilidades</b>\n"
+
+        for event in data:
+            try:
+                home = event["home_team"]
+                away = event["away_team"]
+                odds = event["bookmakers"][0]["markets"][0]["outcomes"]
+
+                for o in odds:
+                    if o["name"] == home:
+                        home_p = round(100 / o["price"], 1)
+                    elif o["name"] == away:
+                        away_p = round(100 / o["price"], 1)
+                    else:
+                        draw_p = round(100 / o["price"], 1)
+
+                msg += f"• {home} vs {away}\n"
+                msg += f"   - Local: {home_p}%\n"
+                msg += f"   - Empate: {draw_p}%\n"
+                msg += f"   - Visitante: {away_p}%\n\n"
+
+            except:
+                continue
+
+        return msg + "\n"
+
+    except Exception as e:
+        return f"📊 Error probabilidades: {e}\n\n"
+
+
+# ============================
+# GENERAR REPORTE COMPLETO
+# ============================
+def generate_report():
+    report = ""
+
+    report += get_tennis_report()
+    report += get_ufc_report()
+    report += get_soccer_report()
+    report += get_probabilities()
+
+    return report
+
+
+# ============================
+# ENDPOINT PRINCIPAL
+# ============================
 @app.get("/run_report")
-async def manual_report():
-    logger.info("/run_report llamado")
-    asyncio.create_task(send_daily_report())
-    return {"status": "Reporte enviado"}
+def run_report():
+    report = generate_report()
+    print("\n====== REPORTE ENVIADO ======\n")
+    print(report)
+
+    ok = send_telegram(report)
+
+    if ok:
+        return {"status": "Reporte enviado"}
+    else:
+        return {"status": "Error enviando Telegram"}
 
 
-@app.get("/")
-def home():
-    return {"status": "OK", "msg": "Sports Notifier Running"}
+# ============================
+# SERVER LOCAL
+# ============================
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=10000)
