@@ -92,63 +92,84 @@ def chunk_message(text):
 # ---------------------------
 # BUILD REPORT
 # ---------------------------
+# ---------------------------
+# BUILD REPORT (versión protegida)
+# ---------------------------
 def build_report_text():
     now = datetime.now(COLOMBIA).strftime("%Y-%m-%d %H:%M")
     out = []
     out.append(f"📊 Reporte Deportivo — {now} (Colombia)\n")
 
-    # Football
+    # ---------------- Football ----------------
     football = get_football_matches()
     out.append("⚽ Partidos de selecciones (Top 20 FIFA):")
     if football:
         for m in football:
-            probs = m.get("probs", {})
-            prob_text = ""
-            if probs:
-                items = list(probs.items())
-                if len(items) >= 2:
-                    prob_text = f" — Prob: {items[0][1]}% / {items[1][1]}%"
-            out.append(f"• {m['home']} vs {m['away']} — {m['kickoff']}{prob_text}")
+            if isinstance(m, dict):
+                probs = m.get("probs", {})
+                prob_text = ""
+                if probs:
+                    items = list(probs.items())
+                    if len(items) >= 2:
+                        prob_text = f" — Prob: {items[0][1]}% / {items[1][1]}%"
+                home = m.get("home", "")
+                away = m.get("away", "")
+                kickoff = m.get("kickoff", "")
+                out.append(f"• {home} vs {away} — {kickoff}{prob_text}")
+            else:
+                # Si es string, mostrar tal cual
+                out.append(f"• {m}")
     else:
         out.append("No hay partidos importantes hoy.")
     out.append("")
 
-    # Tennis
+    # ---------------- Tennis ----------------
     tennis = get_tennis_matches()
     out.append("🎾 Tenis — Top 10:")
     if tennis:
         for t in tennis:
-            probs = t.get("probs", {})
-            prob_text = ""
-            if probs:
-                items = list(probs.items())
-                if len(items) >= 2:
-                    prob_text = f" — Prob: {items[0][1]}% / {items[1][1]}%"
-            out.append(f"• {t['p1']} vs {t['p2']} — {t['time']}{prob_text}")
+            if isinstance(t, dict):
+                probs = t.get("probs", {})
+                prob_text = ""
+                if probs:
+                    items = list(probs.items())
+                    if len(items) >= 2:
+                        prob_text = f" — Prob: {items[0][1]}% / {items[1][1]}%"
+                p1 = t.get("p1", "")
+                p2 = t.get("p2", "")
+                time = t.get("time", "")
+                out.append(f"• {p1} vs {p2} — {time}{prob_text}")
+            else:
+                out.append(f"• {t}")
     else:
         out.append("No hay partidos hoy del Top 10 o falla de la API.")
     out.append("")
 
-    # ---------------------------
-    # UFC (comentado, providers.py no tiene get_ufc_events)
-    # ---------------------------
-    # ufc = get_ufc_events()
-    # out.append("🥋 UFC — Principales peleas:")
-    # if ufc:
-    #     for e in ufc:
-    #         probs = e.get("probs", {})
-    #         prob_text = ""
-    #         if probs:
-    #             items = list(probs.items())
-    #             if len(items) >= 2:
-    #                 prob_text = f" — Prob: {items[0][1]}% / {items[1][1]}%"
-    #         out.append(f"• {e['f1']} vs {e['f2']} — {e['time']}{prob_text}")
-    # else:
-    #     out.append("No hay eventos UFC hoy.")
-    # out.append("")
+    # ---------------- UFC ----------------
+    ufc = get_ufc_events()
+    out.append("🥋 UFC — Principales peleas:")
+    if ufc:
+        for e in ufc:
+            if isinstance(e, dict):
+                probs = e.get("probs", {})
+                prob_text = ""
+                if probs:
+                    items = list(probs.items())
+                    if len(items) >= 2:
+                        prob_text = f" — Prob: {items[0][1]}% / {items[1][1]}%"
+                f1 = e.get("f1", "")
+                f2 = e.get("f2", "")
+                time = e.get("time", "")
+                out.append(f"• {f1} vs {f2} — {time}{prob_text}")
+            else:
+                out.append(f"• {e}")
+    else:
+        out.append("No hay eventos UFC hoy.")
+    out.append("")
 
     out.append("_Probabilidades provistas por casas de apuestas cuando están disponibles._")
     return "\n".join(out)
+
 
 # ---------------------------
 # SEND TELEGRAM
