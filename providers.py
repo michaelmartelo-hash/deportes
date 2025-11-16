@@ -1,7 +1,7 @@
 import os
 import requests
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 log = logging.getLogger("providers")
@@ -33,24 +33,21 @@ def get_football_matches():
         log.info(f"football-data status: {r.status_code}")
 
         data = r.json()
-
-        # Log extendido
         log.info(f"football-data raw matches: {len(data.get('matches', []))}")
 
         for m in data.get("matches", []):
             utc_str = m.get("utcDate")
             if not utc_str:
                 continue
-
             match_dt = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))
             if match_dt.date() != today_utc:
-                continue  # solo hoy
-
+                continue
             home = m["homeTeam"]["name"]
             away = m["awayTeam"]["name"]
             comp = m["competition"]["name"]
-
-            matches_output.append(f"⚽ {home} vs {away}\n   {comp} - {match_dt.astimezone(COL_TZ).strftime('%I:%M %p')}")
+            matches_output.append(
+                f"⚽ {home} vs {away}\n   {comp} - {match_dt.astimezone(COL_TZ).strftime('%I:%M %p')}"
+            )
     except Exception as e:
         log.error(f"football-data error: {e}")
 
@@ -67,20 +64,18 @@ def get_football_matches():
         for f in data.get("response", []):
             fixture = f.get("fixture", {})
             teams = f.get("teams", {})
-
             utc_str = fixture.get("date")
             if not utc_str:
                 continue
-
             match_dt = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))
             if match_dt.date() != today_utc:
                 continue
-
             home = teams.get("home", {}).get("name")
             away = teams.get("away", {}).get("name")
             league = f.get("league", {}).get("name")
-
-            matches_output.append(f"⚽ {home} vs {away}\n   {league} - {match_dt.astimezone(COL_TZ).strftime('%I:%M %p')}")
+            matches_output.append(
+                f"⚽ {home} vs {away}\n   {league} - {match_dt.astimezone(COL_TZ).strftime('%I:%M %p')}"
+            )
 
     except Exception as e:
         log.error(f"api-football error: {e}")
@@ -102,7 +97,6 @@ def get_tennis_matches():
         log.info(f"API-Tennis status: {r.status_code}")
 
         data = r.json()
-
         events = data.get("result", [])
         log.info(f"API-Tennis raw events count: {len(events)}")
 
@@ -119,17 +113,13 @@ def get_tennis_matches():
                 if not date_str or not time_str:
                     continue
 
-                # Parse fecha/hora
                 dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
                 dt = dt.replace(tzinfo=ZoneInfo("UTC")).astimezone(COL_TZ)
 
-                # Aceptamos cualquier partido de HOY en COL
                 if dt.date() != today_col:
                     continue
 
-                matches_out.append(
-                    f"🎾 {p1} vs {p2}\n   {tour} - {dt.strftime('%I:%M %p')}"
-                )
+                matches_out.append(f"🎾 {p1} vs {p2}\n   {tour} - {dt.strftime('%I:%M %p')}")
             except Exception as e:
                 log.error(f"Error parsing tennis event: {e}")
 
@@ -150,7 +140,6 @@ def get_mma_events():
 
         r = requests.get(url, timeout=20)
         data = r.json()
-
         events = data.get("events", [])
         log.info(f"UFC events found: {len(events)}")
 
@@ -158,10 +147,15 @@ def get_mma_events():
             fight = e.get("strEvent")
             date = e.get("dateEvent")
             time = e.get("strTime")
-
             output.append(f"🥋 {fight}\n   {date} {time}")
 
     except Exception as e:
         log.error(f"UFC API error: {e}")
 
     return output
+
+
+# ----------------------------------------------------------
+# Alias para compatibilidad con main.py
+# ----------------------------------------------------------
+get_ufc_events = get_mma_events
