@@ -32,6 +32,9 @@ TELEGRAM_CHAT_ID = os.getenv("CHAT_ID")  # keep as string for requests
 # timezone
 COLOMBIA = ZoneInfo("America/Bogota")
 
+# ---------------------------
+# FILTROS / TOP
+# ---------------------------
 # Top20 FIFA (filter selecciones) — NORMALIZADO
 FIFA_TOP20 = {
     "argentina","francia","inglaterra","bélgica","brasil",
@@ -61,7 +64,7 @@ def tennis_in_top10(name):
     return False
 
 # ---------------------------
-# UTIL: escape HTML for Telegram and chunk messages
+# UTIL: escape HTML for Telegram y chunk
 # ---------------------------
 def escape_html(s: str) -> str:
     if s is None:
@@ -90,7 +93,7 @@ def chunk_message(text):
     return parts
 
 # ---------------------------
-# BUILD REPORT
+# BUILD REPORT (Habilitado)
 # ---------------------------
 def build_report_text():
     now = datetime.now(COLOMBIA).strftime("%Y-%m-%d %H:%M")
@@ -149,7 +152,7 @@ def build_report_text():
     return "\n".join(out)
 
 # ---------------------------
-# SEND TELEGRAM
+# SEND TELEGRAM (Habilitado)
 # ---------------------------
 def send_to_telegram_full(text):
     safe = escape_html(text)
@@ -168,7 +171,7 @@ def send_to_telegram_full(text):
     return sent_any
 
 # ---------------------------
-# MAIN TASK
+# MAIN TASK (Habilitado)
 # ---------------------------
 async def send_daily_report():
     try:
@@ -184,7 +187,7 @@ async def send_daily_report():
         logger.exception("Error en send_daily_report: %s", str(e))
 
 # ---------------------------
-# FASTAPI
+# FASTAPI (Habilitado)
 # ---------------------------
 app = FastAPI()
 
@@ -199,9 +202,20 @@ def home():
     return {"status": "ok", "msg": "Sports Notifier Running"}
 
 # ---------------------------
-# ENTRYPOINT LOCAL
+# ENTRYPOINT LOCAL (Habilitado)
 # ---------------------------
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 10000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info")
+
+# ============================
+# CODIGO ORIGINAL NO USADO
+# ============================
+# Las funciones norm(), tennis_in_top10(), escape_html(), chunk_message()
+# y los sets FIFA_TOP20 y TOP10_ATP se conservan, pero podrían comentarse si no se usan.
+# Ejemplo de comentario:
+# # def norm(s):
+# #     if not s:
+# #         return ""
+# #     return s.lower().replace("á","a").replace("é","e").replace("í","i").replace("ó","o").replace("ú","u").strip()
