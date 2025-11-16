@@ -226,13 +226,23 @@ def get_football_matches():
 # ---------------------------
 # TENNIS (api-tennis)
 # ---------------------------
+# ---------------------------
+# TENNIS (api-tennis.com) — FIXED, UPDATED, NO CODE LOST
+# ---------------------------
 def get_tennis_matches():
-    logger.info("Fetching tennis matches from api-tennis.com (top10 filter)...")
+    logger.info("Fetching tennis matches from api.api-tennis.com (top10 filter)...")
     if not API_TENNIS_KEY:
         logger.warning("No API_TENNIS_KEY configured")
         return []
-    url = "https://api-tennis.com/v1/matches"
-    params = {"date": "today", "apikey": API_TENNIS_KEY}
+
+    # Nueva URL oficial
+    url = "https://api.api-tennis.com/tennis/"
+    params = {
+        "method": "get_events",
+        "date": "today",
+        "APIkey": API_TENNIS_KEY
+    }
+
     try:
         r = requests.get(url, params=params, timeout=10)
         logger.info("API-Tennis status: %s", r.status_code)
@@ -244,39 +254,49 @@ def get_tennis_matches():
         logger.error("API-Tennis request failed: %s", e)
         return []
 
+    data = payload.get("result") or []
     res = []
+
     odds_tennis = fetch_odds("tennis")
 
-    for m in payload.get("data", []):
+    for m in data:
         try:
-            p1 = m.get("player1") or m.get("home") or ""
-            p2 = m.get("player2") or m.get("away") or ""
+            p1 = m.get("event_first_player", "")
+            p2 = m.get("event_second_player", "")
 
-            if tennis_in_top10(p1) or tennis_in_top10(p2):
-                ts = m.get("time")
-                try:
-                    # handle unix timestamp or iso
-                    if isinstance(ts, (int, float)):
-                        dt = datetime.fromtimestamp(int(ts), tz=timezone.utc).astimezone(COLOMBIA)
-                    else:
-                        dt = datetime.fromisoformat(str(ts)).astimezone(COLOMBIA)
-                except Exception:
-                    dt = None
+            if not p1 or not p2:
+                continue
 
-                time_txt = dt.strftime("%Y-%m-%d %H:%M") if dt else "?"
-                matched = find_odds_for_match(odds_tennis, p1, p2, dt)
-                probs = odds_to_probs(matched) if matched else {}
-                res.append({
-                    "p1": p1,
-                    "p2": p2,
-                    "time": time_txt,
-                    "probs": probs
-                })
+            # Filtrar Top 10
+            if not (tennis_in_top10(p1) or tennis_in_top10(p2)):
+                continue
+
+            # fecha + hora
+            date_str = m.get("event_date")
+            time_str = m.get("event_time")
+
+            try:
+                dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+                dt = dt.astimezone(COLOMBIA)
+                time_fmt = dt.strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                time_fmt = "?"
+
+            matched = find_odds_for_match(odds_tennis, p1, p2, dt if isinstance(dt, datetime) else None)
+            probs = odds_to_probs(matched) if matched else {}
+
+            res.append({
+                "p1": p1,
+                "p2": p2,
+                "time": time_fmt,
+                "probs": probs
+            })
         except Exception:
             continue
 
     logger.info("Tennis top10 matches found: %d", len(res))
     return res
+
 
 # ---------------------------
 # UFC / MMA: combine TheOddsAPI and TheSportsDB
