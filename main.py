@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from providers import (
     get_football_matches,
     get_tennis_matches,
-    get_ufc_events,
+    # get_ufc_events,  # comentado porque no existe en providers.py
 )
 
 # ---------------------------
@@ -32,9 +32,6 @@ TELEGRAM_CHAT_ID = os.getenv("CHAT_ID")  # keep as string for requests
 # timezone
 COLOMBIA = ZoneInfo("America/Bogota")
 
-# ---------------------------
-# FILTROS / TOP
-# ---------------------------
 # Top20 FIFA (filter selecciones) — NORMALIZADO
 FIFA_TOP20 = {
     "argentina","francia","inglaterra","bélgica","brasil",
@@ -64,7 +61,7 @@ def tennis_in_top10(name):
     return False
 
 # ---------------------------
-# UTIL: escape HTML for Telegram y chunk
+# UTIL: escape HTML for Telegram and chunk messages
 # ---------------------------
 def escape_html(s: str) -> str:
     if s is None:
@@ -93,7 +90,7 @@ def chunk_message(text):
     return parts
 
 # ---------------------------
-# BUILD REPORT (Habilitado)
+# BUILD REPORT
 # ---------------------------
 def build_report_text():
     now = datetime.now(COLOMBIA).strftime("%Y-%m-%d %H:%M")
@@ -132,27 +129,29 @@ def build_report_text():
         out.append("No hay partidos hoy del Top 10 o falla de la API.")
     out.append("")
 
-    # UFC
-    ufc = get_ufc_events()
-    out.append("🥋 UFC — Principales peleas:")
-    if ufc:
-        for e in ufc:
-            probs = e.get("probs", {})
-            prob_text = ""
-            if probs:
-                items = list(probs.items())
-                if len(items) >= 2:
-                    prob_text = f" — Prob: {items[0][1]}% / {items[1][1]}%"
-            out.append(f"• {e['f1']} vs {e['f2']} — {e['time']}{prob_text}")
-    else:
-        out.append("No hay eventos UFC hoy.")
-    out.append("")
+    # ---------------------------
+    # UFC (comentado, providers.py no tiene get_ufc_events)
+    # ---------------------------
+    # ufc = get_ufc_events()
+    # out.append("🥋 UFC — Principales peleas:")
+    # if ufc:
+    #     for e in ufc:
+    #         probs = e.get("probs", {})
+    #         prob_text = ""
+    #         if probs:
+    #             items = list(probs.items())
+    #             if len(items) >= 2:
+    #                 prob_text = f" — Prob: {items[0][1]}% / {items[1][1]}%"
+    #         out.append(f"• {e['f1']} vs {e['f2']} — {e['time']}{prob_text}")
+    # else:
+    #     out.append("No hay eventos UFC hoy.")
+    # out.append("")
 
     out.append("_Probabilidades provistas por casas de apuestas cuando están disponibles._")
     return "\n".join(out)
 
 # ---------------------------
-# SEND TELEGRAM (Habilitado)
+# SEND TELEGRAM
 # ---------------------------
 def send_to_telegram_full(text):
     safe = escape_html(text)
@@ -171,7 +170,7 @@ def send_to_telegram_full(text):
     return sent_any
 
 # ---------------------------
-# MAIN TASK (Habilitado)
+# MAIN TASK
 # ---------------------------
 async def send_daily_report():
     try:
@@ -187,7 +186,7 @@ async def send_daily_report():
         logger.exception("Error en send_daily_report: %s", str(e))
 
 # ---------------------------
-# FASTAPI (Habilitado)
+# FASTAPI
 # ---------------------------
 app = FastAPI()
 
@@ -202,20 +201,9 @@ def home():
     return {"status": "ok", "msg": "Sports Notifier Running"}
 
 # ---------------------------
-# ENTRYPOINT LOCAL (Habilitado)
+# ENTRYPOINT LOCAL
 # ---------------------------
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 10000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info")
-
-# ============================
-# CODIGO ORIGINAL NO USADO
-# ============================
-# Las funciones norm(), tennis_in_top10(), escape_html(), chunk_message()
-# y los sets FIFA_TOP20 y TOP10_ATP se conservan, pero podrían comentarse si no se usan.
-# Ejemplo de comentario:
-# # def norm(s):
-# #     if not s:
-# #         return ""
-# #     return s.lower().replace("á","a").replace("é","e").replace("í","i").replace("ó","o").replace("ú","u").strip()
